@@ -1,0 +1,61 @@
+#!/bin/python3
+
+import argparse
+import os, random, time
+
+from subprocess import call
+
+def handleArgumements():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("directory", help = "The directory to load files from")
+    parser.add_argument("monitors", help = "The number of monitors you have", type=int)
+    parser.add_argument("-t", "--time", help = "The time in munites between each wallpaper change", default=5, type=int)
+    parser.add_argument("-r", "--roll", help = "Change one monitor at a time instead of all at once", action="store_true")
+
+    return  parser.parse_args();
+
+def getRandomFile( files, directory ):
+    randomIndex = random.randint( 0, len(files) -1 )
+    f = files[randomIndex]
+    return os.path.join( directory, f )
+
+def writeToNitrogen( wallpapers ):
+    for i in range(len(wallpapers)):
+        line = i*5+2
+        arg =  str(line) + " c\\file=" + wallpapers[i]
+        call(["sed", "-i", arg, os.getenv("HOME") + "/.config/nitrogen/bg-saved.cfg"  ])
+
+
+def main():
+    # handle argument parsing
+    arguments = handleArgumements()
+    directory = arguments.directory
+    monitors = arguments.monitors
+    timeDelay = arguments.time
+    roll = arguments.roll
+
+    wallpapers = [0] * monitors
+    toSwich = None
+    if roll:
+        toSwich = 0
+    rollOk = False
+
+    while( True ):
+        files = os.listdir( directory )
+
+        if roll and rollOk:
+            wallpapers[ toSwich ] = getRandomFile( files, directory )
+            toSwich+=1
+            if( toSwich >= monitors ):
+                toSwich = 0
+        else:
+            rollOk = True
+            for i in range(monitors):
+                wallpapers[i] = getRandomFile( files, directory )
+        writeToNitrogen( wallpapers )
+        call(["nitrogen", "--restore"])
+        time.sleep( timeDelay * 60 )
+
+
+# entry point
+main()
