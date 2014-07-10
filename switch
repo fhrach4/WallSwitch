@@ -2,59 +2,108 @@
 
 import argparse
 import os, random, time
+import datetime
 
 from subprocess import call
 
-def handleArgumements():
+def handle_arguments():
+    """
+    Uses argparse to get the arguments from the command line
+    """
     parser = argparse.ArgumentParser()
-    parser.add_argument("directory", help = "The directory to load files from")
-    parser.add_argument("monitors", help = "The number of monitors you have", type=int)
-    parser.add_argument("-t", "--time", help = "The time in munites between each wallpaper change", default=5, type=int)
-    parser.add_argument("-r", "--roll", help = "Change one monitor at a time instead of all at once", action="store_true")
+    parser.add_argument("directory", help="The directory to load files from")
+    parser.add_argument("monitors", help="The number of monitors you have", \
+        type=int)
+    parser.add_argument("-t", "--time", \
+        help="The time in munites between each wallpaper change", default=5, type=int)
+    parser.add_argument("-r", "--roll", \
+        help="Change one monitor at a time instead of all at once", action="store_true")
+    parser.add_argument("--random", help="Pick a random directory from the supplied directory" \
+        , default=False, type=bool)
+    return  parser.parse_args()
 
-    return  parser.parse_args();
+def get_random_file(files, directory):
+    """
+    Gets a random file from the supplied directory
+    """
+    random_index = random.randint(0, len(files) -1)
+    random_file = files[random_index]
 
-def getRandomFile( files, directory ):
-    randomIndex = random.randint( 0, len(files) -1 )
-    f = files[randomIndex]
-    return os.path.join( directory, f )
+    return os.path.join(directory, random_file)
 
-def writeToNitrogen( wallpapers ):
+
+def get_random_subdirectory(directory):
+    """
+    Gets a random subdirectory from the provided directory
+    """
+    ret =  random.choice([name for name in os.listdir(directory) \
+            if os.path.isdir(os.path.join(directory, name)) and not name in \
+                ['.cache', '.config']])
+
+    return os.path.join(directory, ret)
+
+
+def write_to_nitrogen(wallpapers):
+    """
+    Writes the new wallpapers to nitrogen's config located at:
+    ~/.config/nitrogen/bg-saved.cfg
+    """
     for i in range(len(wallpapers)):
-        line = i*5+2
-        arg =  str(line) + " c\\file=" + wallpapers[i]
-        call(["sed", "-i", arg, os.getenv("HOME") + "/.config/nitrogen/bg-saved.cfg"  ])
+        line = i * 5 + 2
+        arg = str(line) + " c\\file=" + wallpapers[i]
+        call(["sed", "-i", arg, os.getenv("HOME") \
+            + "/.config/nitrogen/bg-saved.cfg"])
 
 
 def main():
+    """
+    The main loop
+    """
     # handle argument parsing
-    arguments = handleArgumements()
+    arguments = handle_arguments()
     directory = arguments.directory
     monitors = arguments.monitors
-    timeDelay = arguments.time
+    time_delay = arguments.time
     roll = arguments.roll
 
     wallpapers = [0] * monitors
-    toSwich = None
+    to_switch = None
+
+    if arguments.random:
+        root_directory = arguments.directory
+
     if roll:
-        toSwich = 0
-    rollOk = False
+        to_switch = 0
 
-    while( True ):
-        files = os.listdir( directory )
+    roll_ok = False
+    last_hour = datetime.datetime.now()[3]
 
-        if roll and rollOk:
-            wallpapers[ toSwich ] = getRandomFile( files, directory )
-            toSwich+=1
-            if( toSwich >= monitors ):
-                toSwich = 0
+
+    while True:
+
+        files = os.listdir(directory)
+
+        if roll and roll_ok:
+            wallpapers[to_switch] = get_random_file(files, directory)
+            to_switch += 1
+
+            if to_switch >= monitors:
+                to_switch = 0
         else:
-            rollOk = True
+            roll_ok = True
+
             for i in range(monitors):
-                wallpapers[i] = getRandomFile( files, directory )
-        writeToNitrogen( wallpapers )
+                wallpapers[i] = get_random_file(files, directory)
+
+        write_to_nitrogen(wallpapers)
         call(["nitrogen", "--restore"])
-        time.sleep( timeDelay * 60 )
+
+        time.sleep(time_delay * 60)
+
+        cur_date = datetime.datetime.now()
+
+        if cur_date[3] != last_hour and arguments.random:
+            directory = random_dir(root_directory)
 
 
 # entry point
