@@ -18,14 +18,15 @@ def handle_arguments():
         help="The time in munites between each wallpaper change", default=5, type=int)
     parser.add_argument("-r", "--roll", \
         help="Change one monitor at a time instead of all at once", action="store_true")
-    parser.add_argument("--random", help="Pick a random directory from the supplied directory" \
-        , default=False, type=bool)
+    parser.add_argument("--random", help="Pick a random directory from the supplied directory", \
+        action="store_true")
     return  parser.parse_args()
 
-def get_random_file(files, directory):
+def get_random_file(directory):
     """
     Gets a random file from the supplied directory
     """
+    files = os.listdir(directory)
     random_index = random.randint(0, len(files) -1)
     random_file = files[random_index]
 
@@ -36,10 +37,16 @@ def get_random_subdirectory(directory):
     """
     Gets a random subdirectory from the provided directory
     """
-    ret =  random.choice([name for name in os.listdir(directory) \
+    ret = random.choice([name for name in os.listdir(directory) \
             if os.path.isdir(os.path.join(directory, name)) and not name in \
                 ['.cache', '.config']])
 
+    try:
+        get_random_file(os.path.join(directory, ret))
+    except IndexError:
+        ret = get_random_subdirectory(directory)
+
+    print(ret)
     return os.path.join(directory, ret)
 
 
@@ -71,20 +78,19 @@ def main():
 
     if arguments.random:
         root_directory = arguments.directory
+        directory = get_random_subdirectory(root_directory)
 
     if roll:
         to_switch = 0
 
     roll_ok = False
-    last_hour = datetime.datetime.now()[3]
-
+    last_change = datetime.datetime.now().minute
 
     while True:
 
-        files = os.listdir(directory)
 
         if roll and roll_ok:
-            wallpapers[to_switch] = get_random_file(files, directory)
+            wallpapers[to_switch] = get_random_file(directory)
             to_switch += 1
 
             if to_switch >= monitors:
@@ -93,17 +99,28 @@ def main():
             roll_ok = True
 
             for i in range(monitors):
-                wallpapers[i] = get_random_file(files, directory)
+                wallpapers[i] = get_random_file(directory)
+
+
+
+        cur_date = datetime.datetime.now().minute
+
+        if cur_date >= last_change + 60 and arguments.random:
+            last_change = cur_date
+            directory = get_random_subdirectory(root_directory)
+
+            wallpapers = []
+
+            for i in range(0, 3):
+                wallpapers.append(get_random_file(directory))
+
+            for w in wallpapers:
+                print(w)
 
         write_to_nitrogen(wallpapers)
         call(["nitrogen", "--restore"])
 
         time.sleep(time_delay * 60)
-
-        cur_date = datetime.datetime.now()
-
-        if cur_date[3] != last_hour and arguments.random:
-            directory = random_dir(root_directory)
 
 
 # entry point
