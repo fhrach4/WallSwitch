@@ -1,0 +1,128 @@
+#!/bin/python3
+
+import argparse
+import os, random, time
+import datetime
+
+from subprocess import call
+
+def handle_arguments():
+    """
+    Uses argparse to get the arguments from the command line
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("directory", help="The directory to load files from")
+    parser.add_argument("monitors", help="The number of monitors you have", \
+        type=int)
+    parser.add_argument("-t", "--time", \
+        help="The time in munites between each wallpaper change", default=5, type=int)
+    parser.add_argument("-r", "--roll", \
+        help="Change one monitor at a time instead of all at once", action="store_true")
+    parser.add_argument("--random", help="Pick a random directory from the supplied directory", \
+        action="store_true")
+    return  parser.parse_args()
+
+def get_random_file(directory):
+    """
+    Gets a random file from the supplied directory
+    """
+    files = os.listdir(directory)
+    random_index = random.randint(0, len(files) -1)
+    random_file = files[random_index]
+
+    return os.path.join(directory, random_file)
+
+
+def get_random_subdirectory(directory):
+    """
+    Gets a random subdirectory from the provided directory
+    """
+    ret = random.choice([name for name in os.listdir(directory) \
+            if os.path.isdir(os.path.join(directory, name)) and not name in \
+                ['.cache', '.config']])
+
+    try:
+        get_random_file(os.path.join(directory, ret))
+    except IndexError:
+        ret = get_random_subdirectory(directory)
+
+    return os.path.join(directory, ret)
+
+
+def write_to_nitrogen(wallpapers):
+    """
+    Writes the new wallpapers to nitrogen's config located at:
+    ~/.config/nitrogen/bg-saved.cfg
+    """
+    for i in range(len(wallpapers)):
+        line = i * 5 + 2
+        arg = str(line) + " c\\file=" + wallpapers[i]
+        call(["sed", "-i", arg, os.getenv("HOME") \
+            + "/.config/nitrogen/bg-saved.cfg"])
+
+
+def main():
+    """
+    The main loop
+    """
+    # handle argument parsing
+    arguments = handle_arguments()
+    directory = arguments.directory
+    monitors = arguments.monitors
+    time_delay = arguments.time
+    roll = arguments.roll
+
+    wallpapers = [0] * monitors
+    to_switch = None
+
+    if arguments.random:
+        root_directory = arguments.directory
+        directory = get_random_subdirectory(root_directory)
+
+    if roll:
+        to_switch = 0
+
+    roll_ok = False
+
+    # Change all wallpapers at start
+    for i in range(monitors):
+        wallpapers[i] = get_random_file(directory)
+
+    last_change = datetime.datetime.now()
+
+    while True:
+
+        if roll and roll_ok:
+            wallpapers[to_switch] = get_random_file(directory)
+            to_switch += 1
+
+            if to_switch >= monitors:
+                to_switch = 0
+        else:
+            roll_ok = True
+
+            for i in range(monitors):
+                wallpapers[i] = get_random_file(directory)
+
+
+
+        cur_date = datetime.datetime.now()
+
+        if cur_date >= last_change + datetime.timedelta(minutes=60) and arguments.random:
+            last_change = cur_date
+            directory = get_random_subdirectory(root_directory)
+
+            wallpapers = []
+
+            # change all wallpapers, as a new directory has been selected
+            for i in range(0, monitors):
+                wallpapers.append(get_random_file(directory))
+
+        write_to_nitrogen(wallpapers)
+        call(["nitrogen", "--restore"])
+
+        time.sleep(time_delay * 60)
+
+
+# entry point
+main()
